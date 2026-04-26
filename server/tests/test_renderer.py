@@ -63,6 +63,29 @@ def test_render_weather_card_metric_units():
     out = Image.open(io.BytesIO(result))
     assert out.size == (800, 480)
 
+def test_render_weather_card_light_theme():
+    result = _render_weather_card(MOCK_DATA, "imperial", theme="light")
+    out = Image.open(io.BytesIO(result))
+    assert out.size == (800, 480)
+    # Light theme has a near-white background pixel at top-left
+    assert out.getpixel((0, 0))[0] > 200
+
+def test_render_weather_card_dark_theme_background():
+    result = _render_weather_card(MOCK_DATA, "imperial", theme="dark")
+    out = Image.open(io.BytesIO(result))
+    # Dark theme has a near-black background pixel at top-left
+    assert out.getpixel((0, 0))[0] < 50
+
+def test_render_weather_card_today_layout():
+    result = _render_weather_card(MOCK_DATA, "imperial", forecast="today")
+    out = Image.open(io.BytesIO(result))
+    assert out.size == (800, 480)
+
+def test_render_weather_card_minimal_layout():
+    result = _render_weather_card(MOCK_DATA, "imperial", forecast="minimal")
+    out = Image.open(io.BytesIO(result))
+    assert out.size == (800, 480)
+
 def test_fetch_and_render_weather_calls_open_meteo():
     mock_resp = MagicMock()
     mock_resp.json.return_value = MOCK_DATA

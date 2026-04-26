@@ -64,12 +64,14 @@ async def render_url(body: UrlRequest):
 
 class WeatherRequest(BaseModel):
     units: str = "imperial"
+    theme: str = "dark"     # "dark" | "light"
+    forecast: str = "3day"  # "3day" | "today" | "minimal"
 
 
 @app.post("/render/weather")
 async def render_weather(body: WeatherRequest = WeatherRequest()):
     try:
-        result = fetch_and_render_weather(body.units)
+        result = fetch_and_render_weather(body.units, body.theme, body.forecast)
     except Exception as e:
         raise HTTPException(500, str(e))
     return Response(content=result, media_type="image/png")
