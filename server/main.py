@@ -64,8 +64,8 @@ async def render_url(body: UrlRequest):
 
 class WeatherRequest(BaseModel):
     units: str = "imperial"
-    theme: str = "dark"     # "dark" | "light"
-    forecast: str = "3day"  # "3day" | "today" | "minimal"
+    theme: str = "light"    # "dark" | "light"
+    forecast: str = "minimal"  # "3day" | "today" | "minimal"
 
 
 @app.post("/render/weather")
