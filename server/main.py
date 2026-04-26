@@ -49,7 +49,7 @@ async def render_upload(file: UploadFile = File(...)):
 @app.post("/render/url")
 async def render_url(body: UrlRequest):
     import httpx
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
         try:
             r = await client.get(body.url)
             r.raise_for_status()
