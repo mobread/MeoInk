@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel
 
-from renderer import resize_image
+from renderer import resize_image, fetch_and_render_weather
 
 app = FastAPI()
 app.add_middleware(
@@ -58,6 +58,19 @@ async def render_url(body: UrlRequest):
         result = resize_image(r.content)
     except Exception as e:
         raise HTTPException(400, f"Not a valid image: {e}")
+    return Response(content=result, media_type="image/png")
+
+
+class WeatherRequest(BaseModel):
+    units: str = "imperial"
+
+
+@app.post("/render/weather")
+async def render_weather(body: WeatherRequest = WeatherRequest()):
+    try:
+        result = fetch_and_render_weather(body.units)
+    except Exception as e:
+        raise HTTPException(500, str(e))
     return Response(content=result, media_type="image/png")
 
 
