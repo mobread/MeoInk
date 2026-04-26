@@ -16,8 +16,8 @@ def display():
 
     try:
         from PIL import Image
-        from inky.auto import InkyAuto
-        inky = InkyAuto()
+        from inky.auto import auto
+        inky = auto()
         img = Image.open(IMAGE_PATH)
         inky.set_image(img, saturation=0.5)
         inky.show()
