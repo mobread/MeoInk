@@ -153,7 +153,7 @@ def _draw_3day(d, data, temp, feels, condition, wind, humidity,
         lo = round(daily["temperature_2m_min"][i])
         cond = WEATHER_CODES.get(daily["weathercode"][i], "Unknown")
         d.text((cx, 268), days[i], font=_font(20, bold=True), fill=colors["text"], anchor="mm")
-        d.text((cx, 312), f"H: {hi}{unit_sym}  L: {lo}{unit_sym}",
+        d.text((cx, 312), f"L: {lo}{unit_sym}  H: {hi}{unit_sym}",
                font=_font(18), fill=colors["dim"], anchor="mm")
         d.text((cx, 348), cond, font=_font(16), fill=colors["dim"], anchor="mm")
         if i < 2:
@@ -176,7 +176,7 @@ def _draw_today(d, temp, feels, condition, wind, humidity, hi, lo,
 
     # H/L strip at bottom
     d.line([(30, 320), (770, 320)], fill=colors["divider"], width=1)
-    d.text((400, 390), f"H: {hi}{unit_sym}         L: {lo}{unit_sym}",
+    d.text((400, 390), f"L: {lo}{unit_sym}         H: {hi}{unit_sym}",
            font=_font(40, bold=True), fill=colors["text"], anchor="mm")
 
 
@@ -184,7 +184,7 @@ def _draw_minimal(d, temp, hi, lo, condition, unit_sym, colors):
     # Vertically centered — temp, then H/L, then condition
     d.text((400, 175), f"{temp}{unit_sym}",
            font=_font(130, bold=True), fill=colors["text"], anchor="mm")
-    d.text((400, 290), f"H: {hi}{unit_sym}   ·   L: {lo}{unit_sym}",
+    d.text((400, 290), f"L: {lo}{unit_sym}   ·   H: {hi}{unit_sym}",
            font=_font(32), fill=colors["dim"], anchor="mm")
     d.text((400, 355), condition,
            font=_font(26), fill=colors["accent"], anchor="mm")
