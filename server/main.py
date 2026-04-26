@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel
 
+from renderer import resize_image
+
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -27,6 +29,36 @@ def _save_state(image_bytes: bytes, content_type: str) -> None:
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "type": content_type,
     }))
+
+
+class UrlRequest(BaseModel):
+    url: str
+
+
+@app.post("/render/upload")
+async def render_upload(file: UploadFile = File(...)):
+    data = await file.read()
+    try:
+        result = resize_image(data)
+    except Exception as e:
+        raise HTTPException(400, str(e))
+    return Response(content=result, media_type="image/png")
+
+
+@app.post("/render/url")
+async def render_url(body: UrlRequest):
+    import httpx
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            r = await client.get(body.url)
+            r.raise_for_status()
+        except Exception as e:
+            raise HTTPException(400, f"Failed to fetch URL: {e}")
+    try:
+        result = resize_image(r.content)
+    except Exception as e:
+        raise HTTPException(400, f"Not a valid image: {e}")
+    return Response(content=result, media_type="image/png")
 
 
 @app.get("/health")
