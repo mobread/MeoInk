@@ -14,7 +14,7 @@ def _png(w: int, h: int) -> bytes:
     img.save(buf, "PNG")
     return buf.getvalue()
 
-def test_resize_landscape_crops_to_display():
+def test_resize_landscape_letterboxes_to_display():
     result = resize_image(_png(1200, 800))
     out = Image.open(io.BytesIO(result))
     assert out.size == (800, 480)
