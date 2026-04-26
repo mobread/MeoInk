@@ -9,6 +9,7 @@ from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel
 
 from renderer import resize_image, fetch_and_render_weather
+from pusher import push_to_display
 
 app = FastAPI()
 app.add_middleware(
@@ -72,6 +73,39 @@ async def render_weather(body: WeatherRequest = WeatherRequest()):
     except Exception as e:
         raise HTTPException(500, str(e))
     return Response(content=result, media_type="image/png")
+
+
+@app.post("/push")
+async def push(
+    file: UploadFile = File(...),
+    content_type: str = "upload",
+):
+    data = await file.read()
+    try:
+        await push_to_display(data)
+    except Exception as e:
+        raise HTTPException(502, f"Push failed: {e}")
+    _save_state(data, content_type)
+    return {"ok": True}
+
+
+@app.get("/current")
+async def current():
+    if not STATE_IMAGE.exists():
+        raise HTTPException(404, "No image pushed yet")
+    meta = json.loads(STATE_META.read_text()) if STATE_META.exists() else {}
+    return JSONResponse({
+        "timestamp": meta.get("timestamp"),
+        "type": meta.get("type"),
+        "image_url": "/current/image.png",
+    })
+
+
+@app.get("/current/image.png")
+async def current_image():
+    if not STATE_IMAGE.exists():
+        raise HTTPException(404, "No image")
+    return Response(content=STATE_IMAGE.read_bytes(), media_type="image/png")
 
 
 @app.get("/health")
