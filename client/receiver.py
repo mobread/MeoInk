@@ -1,8 +1,22 @@
 from flask import Flask, request, jsonify
 import os
+import threading
 
 app = Flask(__name__)
 IMAGE_PATH = os.path.join(os.path.dirname(__file__), "current.png")
+
+
+def _update_display(path):
+    try:
+        from PIL import Image
+        from inky.auto import auto
+        inky = auto()
+        img = Image.open(path)
+        inky.set_image(img, saturation=0.5)
+        inky.show()
+    except Exception:
+        pass
+
 
 @app.post("/display")
 def display():
@@ -14,15 +28,7 @@ def display():
     with open(IMAGE_PATH, "wb") as f:
         f.write(image_bytes)
 
-    try:
-        from PIL import Image
-        from inky.auto import auto
-        inky = auto()
-        img = Image.open(IMAGE_PATH)
-        inky.set_image(img, saturation=0.5)
-        inky.show()
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    threading.Thread(target=_update_display, args=(IMAGE_PATH,), daemon=True).start()
 
     return jsonify({"ok": True})
 
