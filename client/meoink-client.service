@@ -1,0 +1,14 @@
+[Unit]
+Description=MeoInk Display Client
+After=network.target
+
+[Service]
+Type=simple
+User=michael
+WorkingDirectory=/home/michael/MeoInk/client
+ExecStart=/home/michael/MeoInk/client/venv/bin/python receiver.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

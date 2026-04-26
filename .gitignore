@@ -1,1 +1,11 @@
 .worktrees/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+.env
+current.png
+current_meta.json
+.superpowers/
