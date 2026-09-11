@@ -34,8 +34,15 @@ the Google Fonts stylesheet.
 
 - **Safari 16.4+**, HTTPS, and a real tap to start — `getUserMedia` cannot be
   called on page load.
-- The page must be **top-level**. iOS blocks camera capture in a cross-origin
-  iframe, so an embedded preview shows a "open in its own tab" banner instead.
+- **The camera is opened before the model downloads.** iOS grants `getUserMedia`
+  only while the tap still counts as user activation; awaiting a ~20 MB download
+  first lets that activation lapse and the call is refused. It also means a
+  blocked camera fails immediately rather than after a long download.
+- **Escaping an embedded frame is best-effort.** A host iframe may withhold
+  `allow-popups` *and* `allow-top-navigation`, in which case `window.open` and
+  `top.location` both silently fail; the Clipboard API can be blocked by
+  permissions policy too. The recovery panel tries all three, then falls back to
+  a selectable address the viewer can copy by hand.
 - `<video playsinline muted autoplay>` — without `playsinline`, iOS takes the
   video fullscreen and the landmark overlay is lost.
 - The front camera is mirrored in CSS; the overlay canvas is mirrored with it so

@@ -86,6 +86,7 @@
 
   /* progress */
   .stages { display:flex; flex-direction:column; gap:7px; width:min(300px,100%); }
+  .stages[hidden], .bar[hidden] { display:none !important; }
   .stage { display:flex; align-items:center; gap:9px; font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:#7E96A3; }
   .stage .dot { width:6px; height:6px; border-radius:50%; background:#2A3E49; flex:none; }
   .stage.active { color:#DCE7EC; } .stage.active .dot { background:var(--signal); }
@@ -172,6 +173,16 @@
   .banner[hidden] { display:none !important; }
   .banner a { color:inherit; font-weight:600; }
   .banner .k { font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--amber); padding-top:2px; white-space:nowrap; }
+  .recover { display:flex; flex-direction:column; gap:9px; align-items:center; width:min(340px,100%); }
+  .recover[hidden] { display:none !important; }
+  .recover-hint { font-size:12.5px; color:#8EA6B2; margin:0; }
+  .recover-hint[hidden] { display:none !important; }
+  .recover-row { display:flex; gap:6px; width:100%; }
+  .stage[hidden] { display:none !important; }
+  .recover-row input {
+    flex:1; min-width:0; font-family:"IBM Plex Mono",monospace; font-size:11.5px;
+    background:#0A1116; color:#DCE7EC; border:1px solid #2A3E49; border-radius:8px; padding:8px 10px;
+  }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
 </style>
 
@@ -181,11 +192,6 @@
     <h1>Pocket Vision Lab</h1>
     <p class="lede">Three Google MediaPipe vision models running on your phone&rsquo;s camera. Frames never leave the device &mdash; the model weights and the WebAssembly runtime are served with this page and execute in the browser.</p>
   </header>
-
-  <div class="banner" id="frame-banner" hidden>
-    <span class="k">Heads up</span>
-    <span>Camera access is blocked inside an embedded preview. <a href="#" id="popout" target="_blank" rel="noopener">Open this page in its own tab</a> to use the camera.</span>
-  </div>
 
   <section class="well idle" id="well" aria-label="Camera viewfinder">
     <video id="video" playsinline muted autoplay disablepictureinpicture></video>
@@ -204,12 +210,21 @@
       <h2 id="curtain-title">Ready when you are</h2>
       <p id="curtain-text">Tap below and allow camera access. The first run downloads the vision runtime and one model &mdash; about 20&nbsp;MB &mdash; then everything is local.</p>
       <div class="stages" id="stages" hidden>
+        <div class="stage" id="st-camera"><span class="dot"></span><span>Camera</span><span class="pct" id="pct-camera">&mdash;</span></div>
         <div class="stage" id="st-runtime"><span class="dot"></span><span>Vision runtime</span><span class="pct" id="pct-runtime">&mdash;</span></div>
         <div class="stage" id="st-model"><span class="dot"></span><span id="st-model-name">Model weights</span><span class="pct" id="pct-model">&mdash;</span></div>
-        <div class="stage" id="st-camera"><span class="dot"></span><span>Camera</span><span class="pct" id="pct-camera">&mdash;</span></div>
       </div>
       <div class="bar" id="bar" hidden><i id="bar-fill"></i></div>
       <button class="btn" id="start">Enable camera</button>
+      <div class="recover" id="recover" hidden>
+        <button class="btn" id="popout">Open in a new tab</button>
+        <p class="recover-hint" id="recover-hint" hidden>Your browser blocked that. Copy the address and paste it into Safari:</p>
+        <div class="recover-row">
+          <input id="recover-url" readonly aria-label="Page address">
+          <button class="btn btn-ghost" id="copy-url">Copy</button>
+        </div>
+      </div>
+
       <button class="btn btn-ghost" id="retry" hidden>Try again</button>
     </div>
 
@@ -261,6 +276,7 @@ const curtain = $("curtain"), curtainTitle = $("curtain-title"), curtainText = $
 const startBtn = $("start"), retryBtn = $("retry"), flipBtn = $("flip");
 const stages = $("stages"), bar = $("bar"), barFill = $("bar-fill"), hud = $("hud");
 const readout = $("readout"), readoutTitle = $("readout-title"), readoutCount = $("readout-count");
+const recover = $("recover"), recoverUrl = $("recover-url"), recoverHint = $("recover-hint");
 
 const MODELS = {
   hands: { file:"gesture_recognizer.task", label:"Gesture Recognizer", title:"Hand landmarks & gestures",
@@ -284,12 +300,9 @@ let ctx = null, drawer = null;
 let fpsWindow = [], lastInferMs = 0;
 let hudTick = 0;
 
-/* ---------- embedded-frame guidance ---------- */
-const embedded = window.self !== window.top;
-if (embedded) {
-  const b = $("frame-banner"); b.hidden = false;
-  $("popout").href = location.href;
-}
+/* ---------- embedding ---------- */
+let embedded = true;
+try { embedded = window.self !== window.top; } catch (e) { embedded = true; }
 
 /* ---------- progress helpers ---------- */
 function setStage(id, state, pct) {
@@ -302,14 +315,38 @@ function setBar(frac) {
   bar.hidden = false;
   barFill.style.width = Math.max(0, Math.min(1, frac)) * 100 + "%";
 }
-function showError(title, text) {
+function showError(title, text, offerEscape) {
   curtain.hidden = false;
   stages.hidden = true; bar.hidden = true;
   curtainTitle.textContent = title;
   curtainText.textContent = text;
   startBtn.hidden = true;
   retryBtn.hidden = false;
+  recover.hidden = !offerEscape;
+  if (offerEscape) recoverUrl.value = location.href;
 }
+
+/* The artifact iframe is sandboxed: window.open needs allow-popups and
+   top-level navigation needs allow-top-navigation, either of which may be
+   withheld. Try both, then fall back to an address the viewer can copy. */
+$("popout").addEventListener("click", () => {
+  const url = recoverUrl.value || location.href;
+  let win = null;
+  try { win = window.open(url, "_blank"); } catch (e) { win = null; }
+  if (win) return;
+  try { window.top.location.href = url; return; } catch (e) { /* blocked */ }
+  recoverHint.hidden = false;
+  recoverUrl.focus(); recoverUrl.select();
+});
+
+$("copy-url").addEventListener("click", async () => {
+  const btn = $("copy-url"), url = recoverUrl.value || location.href;
+  recoverUrl.focus(); recoverUrl.select();
+  let ok = false;
+  try { await navigator.clipboard.writeText(url); ok = true; } catch (e) { ok = false; }
+  btn.textContent = ok ? "Copied" : "Select all";
+  setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+});
 
 /* ---------- asset loading ---------- */
 async function ensureFileset() {
@@ -405,8 +442,8 @@ function describeCameraError(err) {
   const name = err && err.name;
   if (name === "NotAllowedError" || name === "SecurityError") {
     return embedded
-      ? ["Camera blocked in preview", "Embedded previews cannot open the camera. Open this page in its own browser tab, then allow access."]
-      : ["Camera permission denied", "Allow camera access for this site, then tap Try again. On iOS: Settings \u203a Safari \u203a Camera, or the \u201caA\u201d menu in the address bar."];
+      ? ["Camera blocked in this preview", "This page is running inside an embedded frame, which is not allowed to use the camera. Open it as its own page instead.", true]
+      : ["Camera permission denied", "Allow camera access for this site, then tap Try again. On iOS: Settings \u203a Safari \u203a Camera, or the \u201caA\u201d menu in the address bar.", false];
   }
   if (name === "NotFoundError" || name === "OverconstrainedError") {
     return ["No camera available", "This device did not offer a usable camera for the requested mode."];
@@ -559,21 +596,26 @@ function renderPose(result) {
 
 /* ---------- control ---------- */
 async function begin() {
-  startBtn.hidden = true; retryBtn.hidden = true;
+  startBtn.hidden = true; retryBtn.hidden = true; recover.hidden = true;
   stages.hidden = false;
-  curtainTitle.textContent = "Getting set up";
-  curtainText.textContent = "Downloading the runtime and model weights. This only happens once.";
+  curtainTitle.textContent = "Starting the camera";
+  curtainText.textContent = "Allow camera access when your browser asks.";
+  // The camera is opened first, while the tap that triggered this still counts
+  // as user activation -- iOS drops that activation during a long download and
+  // then refuses getUserMedia. It also fails before a 20 MB download, not after.
+  try {
+    await openCamera();
+  } catch (err) {
+    const [t, m, escape] = describeCameraError(err);
+    showError(t, m, escape);
+    return;
+  }
+  curtainTitle.textContent = "Loading the model";
+  curtainText.textContent = "Fetching the vision runtime and model weights. This only happens once.";
   try {
     await ensureTask(mode);
   } catch (err) {
     showError("Could not load the model", (err && err.message) || String(err));
-    return;
-  }
-  try {
-    await openCamera();
-  } catch (err) {
-    const [t, m] = describeCameraError(err);
-    showError(t, m);
     return;
   }
   curtain.hidden = true;
@@ -591,7 +633,7 @@ retryBtn.addEventListener("click", () => { retryBtn.hidden = true; startBtn.hidd
 flipBtn.addEventListener("click", async () => {
   facing = facing === "user" ? "environment" : "user";
   running = false;
-  try { await openCamera(); } catch (err) { const [t, m] = describeCameraError(err); showError(t, m); return; }
+  try { await openCamera(); } catch (err) { const [t, m, esc] = describeCameraError(err); showError(t, m, esc); return; }
   running = true;
 });
 
@@ -606,7 +648,7 @@ document.querySelectorAll(".mode").forEach((btn) => {
     if (!stream) return;              // not started yet \u2014 just switch the label
     const wasRunning = running;
     running = false;
-    curtain.hidden = false; stages.hidden = false; startBtn.hidden = true; retryBtn.hidden = true;
+    curtain.hidden = false; stages.hidden = false; startBtn.hidden = true; retryBtn.hidden = true; recover.hidden = true;
     curtainTitle.textContent = "Loading " + MODELS[mode].label;
     curtainText.textContent = "Fetching model weights for this mode.";
     setStage("runtime", "done"); setStage("camera", "done");
