@@ -1,0 +1,17 @@
+# Caddy gets a real Let's Encrypt certificate automatically, which is what iOS
+# needs -- Safari will not grant camera access behind a self-signed cert.
+#
+#   sudo caddy run --config /etc/caddy/Caddyfile
+#
+# Replace the hostname with one whose DNS A record points at this machine.
+
+vision.example.com {
+	encode zstd gzip
+
+	# Model weights are already float16-compressed; re-compressing wastes CPU
+	# and some proxies corrupt them.
+	@weights path *.task *.wasm
+	header @weights Cache-Control "public, max-age=604800, no-transform"
+
+	reverse_proxy 127.0.0.1:8099
+}

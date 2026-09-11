@@ -1,0 +1,20 @@
+[Unit]
+Description=Pocket Vision Lab (static MediaPipe demo)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/opt/pocket-vision-lab
+ExecStart=/usr/bin/python3 /opt/pocket-vision-lab/serve.py --host 127.0.0.1 --port 8099
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
