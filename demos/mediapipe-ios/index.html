@@ -178,6 +178,11 @@
   .recover-hint { font-size:12.5px; color:#8EA6B2; margin:0; }
   .recover-hint[hidden] { display:none !important; }
   .recover-row { display:flex; gap:6px; width:100%; }
+  .diag {
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.04em;
+    color:#5F7885; margin:0; word-break:break-word;
+  }
+  .diag[hidden] { display:none !important; }
   .stage[hidden] { display:none !important; }
   .recover-row input {
     flex:1; min-width:0; font-family:"IBM Plex Mono",monospace; font-size:11.5px;
@@ -224,6 +229,8 @@
           <button class="btn btn-ghost" id="copy-url">Copy</button>
         </div>
       </div>
+
+      <p class="diag" id="diag" hidden></p>
 
       <button class="btn btn-ghost" id="retry" hidden>Try again</button>
     </div>
@@ -326,6 +333,18 @@ function showError(title, text, offerEscape) {
   if (offerEscape) recoverUrl.value = location.href;
 }
 
+function showDiagnostics(err) {
+  const bits = [
+    (err && err.name) || "unknown",
+    embedded ? "embedded" : "top-level",
+    window.isSecureContext ? "secure" : "insecure",
+  ];
+  if (err && typeof err.elapsedMs === "number") bits.push(err.elapsedMs.toFixed(0) + "ms");
+  const d = $("diag");
+  d.textContent = bits.join("  \u00b7  ");
+  d.hidden = false;
+}
+
 /* The artifact iframe is sandboxed: window.open needs allow-popups and
    top-level navigation needs allow-top-navigation, either of which may be
    withheld. Try both, then fall back to an address the viewer can copy. */
@@ -419,10 +438,16 @@ async function ensureTask(which) {
 async function openCamera() {
   setStage("camera", "active");
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-  stream = await navigator.mediaDevices.getUserMedia({
-    audio: false,
-    video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
-  });
+  const askedAt = performance.now();
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+    });
+  } catch (err) {
+    err.elapsedMs = performance.now() - askedAt;
+    throw err;
+  }
   video.srcObject = stream;
   await video.play();
   await new Promise((res) => {
@@ -441,9 +466,19 @@ async function openCamera() {
 function describeCameraError(err) {
   const name = err && err.name;
   if (name === "NotAllowedError" || name === "SecurityError") {
-    return embedded
-      ? ["Camera blocked in this preview", "This page is running inside an embedded frame, which is not allowed to use the camera. Open it as its own page instead.", true]
-      : ["Camera permission denied", "Allow camera access for this site, then tap Try again. On iOS: Settings \u203a Safari \u203a Camera, or the \u201caA\u201d menu in the address bar.", false];
+    // A Permissions Policy block rejects immediately and never shows a prompt.
+    // A person declining a prompt takes far longer than this.
+    const instant = typeof err.elapsedMs === "number" && err.elapsedMs < 250;
+    if (embedded && instant) {
+      return ["Camera blocked by the host page",
+        "The page embedding this one did not grant it camera permission, so the request was refused without ever asking you. Opening that page in a new tab will not help \u2014 it embeds this one the same way. Serve this page directly to use the camera.", true];
+    }
+    if (embedded) {
+      return ["Camera permission denied",
+        "The request was declined. If you did not see a prompt, the embedding page is blocking it and this needs to be served directly.", true];
+    }
+    return ["Camera permission denied",
+      "Allow camera access for this site, then tap Try again. On iOS: Settings \u203a Safari \u203a Camera, or the \u201caA\u201d menu in the address bar.", false];
   }
   if (name === "NotFoundError" || name === "OverconstrainedError") {
     return ["No camera available", "This device did not offer a usable camera for the requested mode."];
@@ -596,7 +631,7 @@ function renderPose(result) {
 
 /* ---------- control ---------- */
 async function begin() {
-  startBtn.hidden = true; retryBtn.hidden = true; recover.hidden = true;
+  startBtn.hidden = true; retryBtn.hidden = true; recover.hidden = true; $("diag").hidden = true;
   stages.hidden = false;
   curtainTitle.textContent = "Starting the camera";
   curtainText.textContent = "Allow camera access when your browser asks.";
@@ -608,6 +643,7 @@ async function begin() {
   } catch (err) {
     const [t, m, escape] = describeCameraError(err);
     showError(t, m, escape);
+    showDiagnostics(err);
     return;
   }
   curtainTitle.textContent = "Loading the model";
@@ -633,7 +669,7 @@ retryBtn.addEventListener("click", () => { retryBtn.hidden = true; startBtn.hidd
 flipBtn.addEventListener("click", async () => {
   facing = facing === "user" ? "environment" : "user";
   running = false;
-  try { await openCamera(); } catch (err) { const [t, m, esc] = describeCameraError(err); showError(t, m, esc); return; }
+  try { await openCamera(); } catch (err) { const [t, m, esc] = describeCameraError(err); showError(t, m, esc); showDiagnostics(err); return; }
   running = true;
 });
 
