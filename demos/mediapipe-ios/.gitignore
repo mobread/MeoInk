@@ -1,0 +1,4 @@
+# Fetched by ./fetch-assets.sh -- ~40 MB of binaries, not tracked.
+vision_bundle.mjs
+wasm/
+models/

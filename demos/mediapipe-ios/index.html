@@ -1,0 +1,635 @@
+<title>Pocket Vision Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --bg:#EDF1F3; --surface:#FFFFFF; --surface-2:#F5F8F9;
+    --ink:#0E1A1F; --muted:#5C7180; --line:#D3DDE2;
+    --signal:#00A88C; --signal-ink:#00A88C; --rose:#DE2E60; --amber:#B37400;
+    --well:#0A1116; --well-line:#22333D;
+    --shadow:0 1px 2px rgba(14,26,31,.06), 0 8px 24px -12px rgba(14,26,31,.18);
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#080E13; --surface:#101A21; --surface-2:#16222A;
+      --ink:#E3EDF1; --muted:#8099A6; --line:#1E2C35;
+      --signal:#00BFA0; --signal-ink:#00BFA0; --rose:#F0426A; --amber:#FFB020;
+      --well:#05090C; --well-line:#1B2A33;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 32px -16px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#080E13; --surface:#101A21; --surface-2:#16222A;
+    --ink:#E3EDF1; --muted:#8099A6; --line:#1E2C35;
+    --signal:#00BFA0; --signal-ink:#00BFA0; --rose:#F0426A; --amber:#FFB020;
+    --well:#05090C; --well-line:#1B2A33;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 32px -16px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing:border-box; }
+  body {
+    background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    line-height:1.5; -webkit-text-size-adjust:100%; touch-action:manipulation;
+  }
+  .wrap { max-width:760px; margin:0 auto; padding-inline:16px; padding-block:24px 56px; display:flex; flex-direction:column; gap:20px; }
+
+  .eyebrow {
+    font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:11px; font-weight:500;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+  }
+  h1 { font-size:clamp(26px,6vw,36px); line-height:1.1; font-weight:700; letter-spacing:-.02em; margin:6px 0 0; text-wrap:balance; }
+  .lede { color:var(--muted); margin:8px 0 0; max-width:60ch; }
+
+  /* ---- viewfinder ---- */
+  .well {
+    position:relative; background:var(--well); border:1px solid var(--well-line);
+    border-radius:var(--radius); overflow:hidden; aspect-ratio:3/4;
+    box-shadow:var(--shadow);
+  }
+  @media (min-width:620px) { .well { aspect-ratio:4/3; } }
+  #video, #overlay {
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; display:block;
+  }
+  #video { background:var(--well); }
+  .mirrored #video, .mirrored #overlay { transform:scaleX(-1); }
+  .idle #video, .idle #overlay { visibility:hidden; }
+
+  /* start / status curtain */
+  .curtain {
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:14px; padding:24px; text-align:center;
+    color:#DCE7EC; background:radial-gradient(120% 90% at 50% 0%, #14232C 0%, #05090C 70%);
+  }
+  .curtain[hidden] { display:none !important; }
+  .curtain h2 { font-size:17px; font-weight:600; margin:0; letter-spacing:-.01em; }
+  .curtain p { margin:0; font-size:13.5px; color:#8EA6B2; max-width:40ch; }
+  .lens {
+    width:52px; height:52px; border-radius:50%;
+    border:1px solid #2A3E49; display:grid; place-items:center; color:var(--signal);
+  }
+  .lens::after { content:""; width:16px; height:16px; border-radius:50%; background:currentColor; opacity:.9; }
+
+  button { font:inherit; cursor:pointer; }
+  .btn {
+    appearance:none; border:1px solid transparent; border-radius:10px;
+    padding:11px 20px; font-weight:600; font-size:15px;
+    background:var(--signal); color:#04120F; transition:filter .15s ease;
+  }
+  .btn:hover { filter:brightness(1.08); }
+  .btn:active { filter:brightness(.94); }
+  .btn-ghost { background:transparent; color:#DCE7EC; border-color:#2A3E49; font-size:13.5px; padding:9px 16px; }
+  :focus-visible { outline:2px solid var(--signal); outline-offset:2px; }
+
+  /* progress */
+  .stages { display:flex; flex-direction:column; gap:7px; width:min(300px,100%); }
+  .stage { display:flex; align-items:center; gap:9px; font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:#7E96A3; }
+  .stage .dot { width:6px; height:6px; border-radius:50%; background:#2A3E49; flex:none; }
+  .stage.active { color:#DCE7EC; } .stage.active .dot { background:var(--signal); }
+  .stage.done .dot { background:var(--signal); opacity:.5; }
+  .stage .pct { margin-left:auto; font-variant-numeric:tabular-nums; }
+  .bar { height:2px; background:#1B2A33; border-radius:2px; overflow:hidden; width:min(300px,100%); }
+  .bar i { display:block; height:100%; width:0%; background:var(--signal); transition:width .2s ease; }
+
+  /* HUD telemetry */
+  .hud {
+    position:absolute; left:8px; right:8px; bottom:8px;
+    display:flex; gap:6px; align-items:stretch;
+    background:rgba(5,9,12,.72); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    border:1px solid rgba(255,255,255,.09); border-radius:10px; padding:7px 4px;
+  }
+  .hud[hidden] { display:none !important; }
+  .tele { flex:1; min-width:0; text-align:center; padding:0 2px; }
+  .tele dt { font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.1em;
+    text-transform:uppercase; color:#7E96A3; margin:0; }
+  .tele dd { margin:1px 0 0; font-family:"IBM Plex Mono",monospace; font-size:14px; font-weight:500;
+    color:#EAF2F5; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tele dd small { font-size:9.5px; color:#7E96A3; font-weight:400; }
+
+  .flip {
+    position:absolute; top:8px; right:8px; width:38px; height:38px; border-radius:50%;
+    display:grid; place-items:center; border:1px solid rgba(255,255,255,.12);
+    background:rgba(5,9,12,.6); -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px);
+    color:#DCE7EC; padding:0;
+  }
+  .flip[hidden] { display:none !important; }
+  .flip svg { width:18px; height:18px; }
+
+  /* mode selector */
+  .modes { display:grid; grid-template-columns:repeat(3,1fr); gap:6px;
+    background:var(--surface-2); border:1px solid var(--line); border-radius:12px; padding:5px; }
+  .mode {
+    appearance:none; border:0; background:transparent; border-radius:8px;
+    padding:9px 6px 8px; display:flex; flex-direction:column; align-items:center; gap:2px;
+    color:var(--muted); transition:background .15s ease, color .15s ease;
+  }
+  .mode strong { font-size:13.5px; font-weight:600; letter-spacing:-.01em; }
+  .mode span { font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.06em; opacity:.8; }
+  .mode[aria-pressed="true"] { background:var(--surface); color:var(--ink); box-shadow:var(--shadow); }
+  .mode[aria-pressed="true"] span { color:var(--signal-ink); opacity:1; }
+
+  /* readout */
+  .panel { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); }
+  .panel-head { display:flex; align-items:baseline; gap:10px; padding:14px 16px 0; }
+  .panel-head h2 { font-size:14px; font-weight:600; margin:0; letter-spacing:-.01em; }
+  .panel-head .count { margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .readout { padding:12px 16px 16px; display:flex; flex-direction:column; gap:12px; min-height:104px; }
+  .empty { color:var(--muted); font-size:13.5px; margin:auto 0; }
+
+  .subject { display:flex; flex-direction:column; gap:7px; }
+  .subject-top { display:flex; align-items:center; gap:8px; }
+  .chip {
+    font-family:"IBM Plex Mono",monospace; font-size:10.5px; font-weight:500; letter-spacing:.06em;
+    text-transform:uppercase; padding:3px 7px; border-radius:5px;
+    background:color-mix(in srgb, var(--signal) 16%, transparent); color:var(--signal-ink);
+  }
+  .chip.alt { background:color-mix(in srgb, var(--rose) 15%, transparent); color:var(--rose); }
+  .subject-top strong { font-size:15px; font-weight:600; letter-spacing:-.01em; }
+  .subject-top .val { margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+
+  .meters { display:flex; flex-direction:column; gap:5px; }
+  .meter { display:grid; grid-template-columns:minmax(84px,34%) 1fr auto; align-items:center; gap:9px; }
+  .meter .name { font-size:12.5px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .meter .track { height:5px; border-radius:3px; background:var(--surface-2); border:1px solid var(--line); overflow:hidden; }
+  .meter .track i { display:block; height:100%; background:var(--signal); border-radius:3px; }
+  .meter .track.alt i { background:var(--rose); }
+  .meter .num { font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--muted); font-variant-numeric:tabular-nums; min-width:34px; text-align:right; }
+
+  /* notes */
+  .notes { border-top:1px solid var(--line); padding-top:18px; display:flex; flex-direction:column; gap:12px; }
+  .note { display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:start; font-size:13.5px; color:var(--muted); }
+  .note b { color:var(--ink); font-weight:600; }
+  .note .k { font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--signal-ink); padding-top:2px; white-space:nowrap; }
+  .banner {
+    display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border-radius:10px; font-size:13.5px;
+    background:color-mix(in srgb, var(--amber) 12%, var(--surface)); border:1px solid color-mix(in srgb, var(--amber) 34%, var(--line));
+    color:var(--ink);
+  }
+  .banner[hidden] { display:none !important; }
+  .banner a { color:inherit; font-weight:600; }
+  .banner .k { font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--amber); padding-top:2px; white-space:nowrap; }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">MediaPipe Tasks &middot; on-device inference</p>
+    <h1>Pocket Vision Lab</h1>
+    <p class="lede">Three Google MediaPipe vision models running on your phone&rsquo;s camera. Frames never leave the device &mdash; the model weights and the WebAssembly runtime are served with this page and execute in the browser.</p>
+  </header>
+
+  <div class="banner" id="frame-banner" hidden>
+    <span class="k">Heads up</span>
+    <span>Camera access is blocked inside an embedded preview. <a href="#" id="popout" target="_blank" rel="noopener">Open this page in its own tab</a> to use the camera.</span>
+  </div>
+
+  <section class="well idle" id="well" aria-label="Camera viewfinder">
+    <video id="video" playsinline muted autoplay disablepictureinpicture></video>
+    <canvas id="overlay"></canvas>
+
+    <button class="flip" id="flip" hidden aria-label="Switch camera">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 8V6a2 2 0 0 1 2-2h3l1.5-2h5L16 4h3a2 2 0 0 1 2 2v2"/>
+        <path d="M21 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6"/>
+        <path d="M8 13l-3 3 3 3"/><path d="M16 19l3-3-3-3"/><path d="M5 16h14"/>
+      </svg>
+    </button>
+
+    <div class="curtain" id="curtain">
+      <div class="lens" aria-hidden="true"></div>
+      <h2 id="curtain-title">Ready when you are</h2>
+      <p id="curtain-text">Tap below and allow camera access. The first run downloads the vision runtime and one model &mdash; about 20&nbsp;MB &mdash; then everything is local.</p>
+      <div class="stages" id="stages" hidden>
+        <div class="stage" id="st-runtime"><span class="dot"></span><span>Vision runtime</span><span class="pct" id="pct-runtime">&mdash;</span></div>
+        <div class="stage" id="st-model"><span class="dot"></span><span id="st-model-name">Model weights</span><span class="pct" id="pct-model">&mdash;</span></div>
+        <div class="stage" id="st-camera"><span class="dot"></span><span>Camera</span><span class="pct" id="pct-camera">&mdash;</span></div>
+      </div>
+      <div class="bar" id="bar" hidden><i id="bar-fill"></i></div>
+      <button class="btn" id="start">Enable camera</button>
+      <button class="btn btn-ghost" id="retry" hidden>Try again</button>
+    </div>
+
+    <dl class="hud" id="hud" hidden>
+      <div class="tele"><dt>Rate</dt><dd id="t-fps">&mdash;<small> fps</small></dd></div>
+      <div class="tele"><dt>Inference</dt><dd id="t-ms">&mdash;<small> ms</small></dd></div>
+      <div class="tele"><dt>Delegate</dt><dd id="t-delegate">&mdash;</dd></div>
+      <div class="tele"><dt>Frame</dt><dd id="t-res">&mdash;</dd></div>
+    </dl>
+  </section>
+
+  <div class="modes" role="group" aria-label="Vision model">
+    <button class="mode" id="m-hands" data-mode="hands" aria-pressed="true">
+      <strong>Hands</strong><span>21 PTS &times; 2</span>
+    </button>
+    <button class="mode" id="m-face" data-mode="face" aria-pressed="false">
+      <strong>Face</strong><span>478 PTS</span>
+    </button>
+    <button class="mode" id="m-pose" data-mode="pose" aria-pressed="false">
+      <strong>Pose</strong><span>33 PTS</span>
+    </button>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2 id="readout-title">Hand landmarks &amp; gestures</h2>
+      <span class="count" id="readout-count">idle</span>
+    </div>
+    <div class="readout" id="readout">
+      <p class="empty" id="readout-empty">Start the camera to see live model output. Hands mode reports handedness, the recognized gesture, and its confidence for each hand in frame.</p>
+    </div>
+  </section>
+
+  <section class="notes">
+    <div class="note"><span class="k">Privacy</span><span><b>Nothing is uploaded.</b> <code>getUserMedia</code> frames go straight into the WebAssembly graph and are discarded. There is no network call after the model loads.</span></div>
+    <div class="note"><span class="k">iOS</span><span><b>Safari 16.4 or newer.</b> Camera capture needs HTTPS, a real tap to start, and a top-level page &mdash; iOS blocks capture in cross-origin embeds.</span></div>
+    <div class="note"><span class="k">Backend</span><span><b>GPU first, CPU fallback.</b> The graph is built against the WebGL delegate and rebuilt on CPU if that fails. The Delegate readout shows which one was requested &mdash; MediaPipe may still route individual ops to CPU.</span></div>
+    <div class="note"><span class="k">Models</span><span><b>Gesture Recognizer, Face Landmarker, Pose Landmarker (lite).</b> Each is fetched once on first use, then cached by the browser.</span></div>
+  </section>
+</div>
+
+<script type="module">
+import { FilesetResolver, GestureRecognizer, FaceLandmarker, PoseLandmarker, DrawingUtils }
+  from "./vision_bundle.mjs";
+
+const $ = (id) => document.getElementById(id);
+const well = $("well"), video = $("video"), overlay = $("overlay");
+const curtain = $("curtain"), curtainTitle = $("curtain-title"), curtainText = $("curtain-text");
+const startBtn = $("start"), retryBtn = $("retry"), flipBtn = $("flip");
+const stages = $("stages"), bar = $("bar"), barFill = $("bar-fill"), hud = $("hud");
+const readout = $("readout"), readoutTitle = $("readout-title"), readoutCount = $("readout-count");
+
+const MODELS = {
+  hands: { file:"gesture_recognizer.task", label:"Gesture Recognizer", title:"Hand landmarks & gestures",
+           empty:"Hands mode reports handedness, the recognized gesture, and its confidence for each hand in frame." },
+  face:  { file:"face_landmarker.task", label:"Face Landmarker", title:"Face mesh & blendshapes",
+           empty:"Face mode reports the strongest facial blendshapes \u2014 the same expression coefficients used to drive avatars." },
+  pose:  { file:"pose_landmarker_lite.task", label:"Pose Landmarker", title:"Body pose",
+           empty:"Pose mode reports how confidently each key joint is visible. Step back so your torso fills the frame." },
+};
+
+let fileset = null;                 // resolved wasm fileset
+const tasks = {};                   // mode -> task instance
+let mode = "hands";
+let delegate = "GPU";
+let facing = "user";
+let stream = null;
+let running = false;
+let rafId = 0;
+let lastVideoTime = -1;
+let ctx = null, drawer = null;
+let fpsWindow = [], lastInferMs = 0;
+let hudTick = 0;
+
+/* ---------- embedded-frame guidance ---------- */
+const embedded = window.self !== window.top;
+if (embedded) {
+  const b = $("frame-banner"); b.hidden = false;
+  $("popout").href = location.href;
+}
+
+/* ---------- progress helpers ---------- */
+function setStage(id, state, pct) {
+  const el = $("st-" + id);
+  el.classList.toggle("active", state === "active");
+  el.classList.toggle("done", state === "done");
+  $("pct-" + id).textContent = pct ?? (state === "done" ? "ok" : state === "active" ? "\u2026" : "\u2014");
+}
+function setBar(frac) {
+  bar.hidden = false;
+  barFill.style.width = Math.max(0, Math.min(1, frac)) * 100 + "%";
+}
+function showError(title, text) {
+  curtain.hidden = false;
+  stages.hidden = true; bar.hidden = true;
+  curtainTitle.textContent = title;
+  curtainText.textContent = text;
+  startBtn.hidden = true;
+  retryBtn.hidden = false;
+}
+
+/* ---------- asset loading ---------- */
+async function ensureFileset() {
+  if (fileset) return fileset;
+  setStage("runtime", "active");
+  fileset = await FilesetResolver.forVisionTasks("./wasm");
+  setStage("runtime", "done");
+  return fileset;
+}
+
+async function fetchModel(file, onProgress) {
+  const res = await fetch("./models/" + file);
+  if (!res.ok) throw new Error("Could not load model (" + res.status + ")");
+  const total = Number(res.headers.get("content-length")) || 0;
+  if (!res.body || !total) return new Uint8Array(await res.arrayBuffer());
+  const reader = res.body.getReader();
+  const chunks = []; let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value); received += value.length;
+    onProgress(received / total);
+  }
+  const out = new Uint8Array(received); let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+
+async function buildTask(which, buffer, withDelegate) {
+  const base = { modelAssetBuffer: buffer, delegate: withDelegate };
+  if (which === "hands") {
+    return GestureRecognizer.createFromOptions(fileset, {
+      baseOptions: base, runningMode: "VIDEO", numHands: 2,
+    });
+  }
+  if (which === "face") {
+    return FaceLandmarker.createFromOptions(fileset, {
+      baseOptions: base, runningMode: "VIDEO", numFaces: 1,
+      outputFaceBlendshapes: true,
+    });
+  }
+  return PoseLandmarker.createFromOptions(fileset, {
+    baseOptions: base, runningMode: "VIDEO", numPoses: 1,
+  });
+}
+
+async function ensureTask(which) {
+  if (tasks[which]) return tasks[which];
+  await ensureFileset();
+  const meta = MODELS[which];
+  $("st-model-name").textContent = meta.label;
+  setStage("model", "active", "0%");
+  const buffer = await fetchModel(meta.file, (f) => {
+    setStage("model", "active", Math.round(f * 100) + "%");
+    setBar(f);
+  });
+  setStage("model", "done");
+  let task;
+  try {
+    task = await buildTask(which, buffer, "GPU");
+  } catch (e) {
+    delegate = "CPU";
+    task = await buildTask(which, buffer, "CPU");
+  }
+  tasks[which] = task;
+  return task;
+}
+
+/* ---------- camera ---------- */
+async function openCamera() {
+  setStage("camera", "active");
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+  });
+  video.srcObject = stream;
+  await video.play();
+  await new Promise((res) => {
+    if (video.videoWidth) return res();
+    video.onloadedmetadata = () => res();
+  });
+  overlay.width = video.videoWidth;
+  overlay.height = video.videoHeight;
+  ctx = overlay.getContext("2d");
+  drawer = new DrawingUtils(ctx);
+  well.classList.toggle("mirrored", facing === "user");
+  $("t-res").textContent = video.videoWidth + "\u00d7" + video.videoHeight;
+  setStage("camera", "done");
+}
+
+function describeCameraError(err) {
+  const name = err && err.name;
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return embedded
+      ? ["Camera blocked in preview", "Embedded previews cannot open the camera. Open this page in its own browser tab, then allow access."]
+      : ["Camera permission denied", "Allow camera access for this site, then tap Try again. On iOS: Settings \u203a Safari \u203a Camera, or the \u201caA\u201d menu in the address bar."];
+  }
+  if (name === "NotFoundError" || name === "OverconstrainedError") {
+    return ["No camera available", "This device did not offer a usable camera for the requested mode."];
+  }
+  if (!window.isSecureContext) {
+    return ["Secure connection required", "Camera capture only works over HTTPS."];
+  }
+  return ["Could not start", (err && err.message) || "The camera failed to start."];
+}
+
+/* ---------- main loop ---------- */
+function loop() {
+  rafId = requestAnimationFrame(loop);
+  if (!running || video.readyState < 2) return;
+  if (video.currentTime === lastVideoTime) return;
+  lastVideoTime = video.currentTime;
+
+  const task = tasks[mode];
+  if (!task) return;
+
+  const t0 = performance.now();
+  let result;
+  try {
+    // GestureRecognizer exposes recognizeForVideo; the landmarkers use detectForVideo.
+    result = mode === "hands" ? task.recognizeForVideo(video, t0) : task.detectForVideo(video, t0);
+  } catch (e) {
+    if (!loop.warned) { loop.warned = true; console.error("Inference failed:", e); }
+    return;
+  }
+  lastInferMs = performance.now() - t0;
+
+  fpsWindow.push(t0);
+  while (fpsWindow.length > 2 && t0 - fpsWindow[0] > 1000) fpsWindow.shift();
+
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  if (mode === "hands") drawHands(result);
+  else if (mode === "face") drawFace(result);
+  else drawPose(result);
+
+  if (++hudTick % 6 === 0) updateHud();
+}
+
+function updateHud() {
+  const span = fpsWindow.length > 1 ? (fpsWindow[fpsWindow.length - 1] - fpsWindow[0]) / 1000 : 0;
+  const fps = span > 0 ? (fpsWindow.length - 1) / span : 0;
+  $("t-fps").innerHTML = fps.toFixed(0) + "<small> fps</small>";
+  $("t-ms").innerHTML = lastInferMs.toFixed(0) + "<small> ms</small>";
+  $("t-delegate").textContent = delegate;
+}
+
+/* ---------- drawing ---------- */
+const TEAL = "#00BFA0", ROSE = "#F0426A", BONE = "#EAF2F5";
+const scale = () => Math.max(overlay.width, overlay.height) / 720;
+
+function drawHands(result) {
+  const hands = result.landmarks || [];
+  hands.forEach((lm, i) => {
+    const color = i === 0 ? TEAL : ROSE;
+    drawer.drawConnectors(lm, GestureRecognizer.HAND_CONNECTIONS,
+      { color, lineWidth: 3.5 * scale() });
+    drawer.drawLandmarks(lm, { color: BONE, fillColor: color, radius: 4 * scale(), lineWidth: 1 * scale() });
+  });
+  renderHands(result);
+}
+
+function drawFace(result) {
+  const faces = result.faceLandmarks || [];
+  const w = 1.1 * scale();
+  faces.forEach((lm) => {
+    drawer.drawConnectors(lm, FaceLandmarker.FACE_LANDMARKS_TESSELATION, { color: "rgba(0,191,160,.32)", lineWidth: w });
+    for (const set of [FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,
+                       FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, FaceLandmarker.FACE_LANDMARKS_LIPS]) {
+      drawer.drawConnectors(lm, set, { color: BONE, lineWidth: 2 * scale() });
+    }
+    for (const set of [FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW]) {
+      drawer.drawConnectors(lm, set, { color: ROSE, lineWidth: 2 * scale() });
+    }
+  });
+  renderFace(result);
+}
+
+function drawPose(result) {
+  const poses = result.landmarks || [];
+  poses.forEach((lm) => {
+    drawer.drawConnectors(lm, PoseLandmarker.POSE_CONNECTIONS, { color: TEAL, lineWidth: 4 * scale() });
+    drawer.drawLandmarks(lm, { color: BONE, fillColor: ROSE, radius: 4.5 * scale(), lineWidth: 1 * scale() });
+  });
+  renderPose(result);
+}
+
+/* ---------- readout ---------- */
+const pretty = (s) => s.replace(/_/g, " ").toLowerCase().replace(/(^|\s)\w/g, (m) => m.toUpperCase());
+function meter(name, value, alt) {
+  const pct = Math.round(value * 100);
+  return `<div class="meter"><span class="name">${name}</span>
+    <span class="track${alt ? " alt" : ""}"><i style="width:${pct}%"></i></span>
+    <span class="num">${pct}%</span></div>`;
+}
+function setReadout(count, html) {
+  readoutCount.textContent = count;
+  readout.innerHTML = html || `<p class="empty">${MODELS[mode].empty}</p>`;
+}
+
+function renderHands(result) {
+  const hands = result.landmarks || [];
+  if (!hands.length) return setReadout("no hands", "");
+  const html = hands.map((_, i) => {
+    const handed = result.handedness?.[i]?.[0];
+    const gesture = result.gestures?.[i]?.[0];
+    const name = gesture ? pretty(gesture.categoryName) : "\u2014";
+    const score = gesture ? gesture.score : 0;
+    return `<div class="subject">
+      <div class="subject-top">
+        <span class="chip${i ? " alt" : ""}">${handed ? handed.categoryName : "Hand " + (i + 1)}</span>
+        <strong>${name === "None" ? "No gesture" : name}</strong>
+        <span class="val">21 pts</span>
+      </div>
+      <div class="meters">${meter("Confidence", score, i === 1)}</div>
+    </div>`;
+  }).join("");
+  setReadout(hands.length + (hands.length === 1 ? " hand" : " hands"), html);
+}
+
+function renderFace(result) {
+  const shapes = result.faceBlendshapes?.[0]?.categories;
+  if (!shapes) return setReadout("no face", "");
+  const top = shapes
+    .filter((c) => c.categoryName !== "_neutral")
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6);
+  const html = `<div class="subject">
+      <div class="subject-top"><span class="chip">Face 1</span><strong>Top blendshapes</strong><span class="val">478 pts</span></div>
+      <div class="meters">${top.map((c) => meter(pretty(c.categoryName), c.score)).join("")}</div>
+    </div>`;
+  setReadout("1 face", html);
+}
+
+const POSE_KEY = [[0,"Nose"],[11,"Left shoulder"],[12,"Right shoulder"],[15,"Left wrist"],[16,"Right wrist"],[25,"Left knee"]];
+function renderPose(result) {
+  const lm = result.landmarks?.[0];
+  if (!lm) return setReadout("no pose", "");
+  const visible = lm.filter((p) => (p.visibility ?? 0) > 0.5).length;
+  const html = `<div class="subject">
+      <div class="subject-top"><span class="chip">Pose 1</span><strong>Joint visibility</strong>
+        <span class="val">${visible}/33 visible</span></div>
+      <div class="meters">${POSE_KEY.map(([i, n]) => meter(n, lm[i]?.visibility ?? 0)).join("")}</div>
+    </div>`;
+  setReadout(visible + "/33 visible", html);
+}
+
+/* ---------- control ---------- */
+async function begin() {
+  startBtn.hidden = true; retryBtn.hidden = true;
+  stages.hidden = false;
+  curtainTitle.textContent = "Getting set up";
+  curtainText.textContent = "Downloading the runtime and model weights. This only happens once.";
+  try {
+    await ensureTask(mode);
+  } catch (err) {
+    showError("Could not load the model", (err && err.message) || String(err));
+    return;
+  }
+  try {
+    await openCamera();
+  } catch (err) {
+    const [t, m] = describeCameraError(err);
+    showError(t, m);
+    return;
+  }
+  curtain.hidden = true;
+  well.classList.remove("idle");
+  hud.hidden = false;
+  flipBtn.hidden = false;
+  running = true;
+  updateHud();
+  if (!rafId) loop();
+}
+
+startBtn.addEventListener("click", begin);
+retryBtn.addEventListener("click", () => { retryBtn.hidden = true; startBtn.hidden = false; begin(); });
+
+flipBtn.addEventListener("click", async () => {
+  facing = facing === "user" ? "environment" : "user";
+  running = false;
+  try { await openCamera(); } catch (err) { const [t, m] = describeCameraError(err); showError(t, m); return; }
+  running = true;
+});
+
+document.querySelectorAll(".mode").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const next = btn.dataset.mode;
+    if (next === mode) return;
+    document.querySelectorAll(".mode").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+    mode = next;
+    readoutTitle.textContent = MODELS[mode].title;
+    setReadout("idle", "");
+    if (!stream) return;              // not started yet \u2014 just switch the label
+    const wasRunning = running;
+    running = false;
+    curtain.hidden = false; stages.hidden = false; startBtn.hidden = true; retryBtn.hidden = true;
+    curtainTitle.textContent = "Loading " + MODELS[mode].label;
+    curtainText.textContent = "Fetching model weights for this mode.";
+    setStage("runtime", "done"); setStage("camera", "done");
+    try {
+      await ensureTask(mode);
+    } catch (err) {
+      showError("Could not load model", (err && err.message) || String(err));
+      return;
+    }
+    curtain.hidden = true;
+    lastVideoTime = -1;
+    running = wasRunning;
+  });
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { running = false; }
+  else if (stream && curtain.hidden) { lastVideoTime = -1; running = true; }
+});
+
+if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+  showError("Camera unavailable", window.isSecureContext
+    ? "This browser did not expose a camera API. Try Safari or Chrome."
+    : "Camera capture requires a secure (HTTPS) connection.");
+}
+</script>
